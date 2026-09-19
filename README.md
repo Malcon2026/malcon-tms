@@ -75,7 +75,21 @@ Requires a **Business** (or Cloud) plan with **Node.js web apps**.
 ### 3. Environment variables (optional)
 Production builds embed the public Supabase URL and anon key in `next.config.mjs`, so Hostinger deploy works without extra env vars. Override them in hPanel if you switch Supabase projects.
 
-### 4. Custom domain
-Attach your domain to the Node.js site in hPanel.
+### 4. Subdomain `app.malcontms.com`
+
+Use this when **malcontms.com** is already on Hostinger and the Node.js app is deployed (temp URL works first).
+
+1. **Websites** → find your **Malcon TMS / Node.js** site (not the main WordPress/HTML site unless that *is* the Node app).
+2. Click **Connect domain** (or open the site → **Connect domain**).
+3. Enter **`app.malcontms.com`** and confirm.
+4. If hPanel asks for DNS and the domain is on the **same Hostinger account**, it usually adds records for you. Otherwise add what hPanel shows (often an **A record** for `app` → your hosting IP, or a **CNAME** if instructed).
+5. Wait for DNS (minutes to a few hours). Hostinger installs **SSL** automatically.
+
+**Notes**
+- The Node.js app must be its **own website** in hPanel; you connect the subdomain to *that* site, not to a folder under `public_html` on another site.
+- Keep **`malcontms.com`** (apex) on your main site; only **`app`** points to Malcon TMS.
+- After the domain is live, open **Supabase** → **Authentication** → **URL configuration** and confirm **Site URL** is `https://app.malcontms.com` and redirect URLs include `https://app.malcontms.com/**` (this repo’s `supabase/config.toml` is set for that; run `npm run supabase:push` or update in the dashboard if needed).
+
+Guide: [Connect a custom domain to a Node.js application](https://www.hostinger.com/support/how-to-connect-a-custom-domain-to-a-node-js-application/)
 
 References: [Hostinger GitHub Node.js](https://docs.hostinger.com/node.js/github), [Supabase Dashboard](https://supabase.com/dashboard/project/urupxpfydfrvjlkpqlvi).
