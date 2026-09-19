@@ -75,20 +75,21 @@ Requires a **Business** (or Cloud) plan with **Node.js web apps**.
 ### 3. Environment variables (optional)
 Production builds embed the public Supabase URL and anon key in `next.config.mjs`, so Hostinger deploy works without extra env vars. Override them in hPanel if you switch Supabase projects.
 
-### 4. Subdomain `app.malconnexus.com`
+### 4. Subdomain `tms.malconexus.com`
 
 Use this when **malconnexus.com** is already on Hostinger and the Node.js app is deployed (temp URL works first).
 
 1. **Websites** → find your **Malcon TMS / Node.js** site (not the main WordPress/HTML site unless that *is* the Node app).
 2. Click **Connect domain** (or open the site → **Connect domain**).
-3. Enter **`app.malconnexus.com`** and confirm.
+3. Enter **`tms.malconexus.com`** and confirm.
 4. If hPanel asks for DNS and the domain is on the **same Hostinger account**, it usually adds records for you. Otherwise add what hPanel shows (often an **A record** for `app` → your hosting IP, or a **CNAME** if instructed).
 5. Wait for DNS (minutes to a few hours). Hostinger installs **SSL** automatically.
 
 **Notes**
 - The Node.js app must be its **own website** in hPanel; you connect the subdomain to *that* site, not to a folder under `public_html` on another site.
-- Keep **`malconnexus.com`** (apex) on your main site; only **`app`** points to Malcon TMS.
-- After the domain is live, open **Supabase** → **Authentication** → **URL configuration** and confirm **Site URL** is `https://app.malconnexus.com` and redirect URLs include `https://app.malconnexus.com/**` (this repo’s `supabase/config.toml` is set for that; run `npm run supabase:push` or update in the dashboard if needed).
+- Keep **`malconnexus.com`** (apex) on your main site; **`tms`** points to Malcon TMS.
+- After the domain is live, open **Supabase** → **Authentication** → **URL configuration** and confirm **Site URL** is `https://tms.malconexus.com` and redirect URLs include `https://tms.malconexus.com/**` (this repo’s `supabase/config.toml` is set for that; run `npm run supabase:push` or update in the dashboard if needed).
+- **Deploy:** Hostinger rebuilds when you **push to GitHub** (`main`). There is no separate “push domain” step—the subdomain is already attached in hPanel.
 
 Guide: [Connect a custom domain to a Node.js application](https://www.hostinger.com/support/how-to-connect-a-custom-domain-to-a-node-js-application/)
 
