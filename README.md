@@ -54,13 +54,13 @@ npm run start
 
 ## Deploy on Hostinger (GitHub)
 
-Repo: **https://github.com/Malcon2026/taskflow-app**
+Repo: **https://github.com/Malcon2026/malcon-tms**
 
 Requires a **Business** (or Cloud) plan with **Node.js web apps**.
 
 ### 1. Connect GitHub in hPanel
 1. **Websites** → **Add Website** → **Node.js Apps**
-2. **Import Git Repository** → select `Malcon2026/taskflow-app`, branch `main`
+2. **Import Git Repository** → select `Malcon2026/malcon-tms`, branch `main`
 
 ### 2. Build settings
 
