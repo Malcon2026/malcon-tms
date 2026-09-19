@@ -12,9 +12,9 @@ export default function AdminDashboard() {
   const [created, setCreated] = useState(null)
   const [copied, setCopied] = useState(false)
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
-    const res = addMember(name, email, password)
+    const res = await addMember(name, email, password)
     if (res.error) {
       setError(res.error)
       setCreated(null)
@@ -117,7 +117,8 @@ export default function AdminDashboard() {
           )}
 
           <p className="card-foot">
-            New users get admin access and see every task on the board and dashboard.
+            New users get admin access and see every task on the board and dashboard. Accounts are
+            stored in Supabase Auth.
           </p>
         </div>
 

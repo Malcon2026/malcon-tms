@@ -18,7 +18,7 @@ export default function Navbar() {
       <div className="nav-left">
         <button className="brand" onClick={() => setView('dashboard')}>
           <LogoMark />
-          <span>TaskFlow</span>
+          <span>Malcon TMS</span>
         </button>
         <nav className="nav-links">
           {LINKS.map((l) => (

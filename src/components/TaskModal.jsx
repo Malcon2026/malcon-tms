@@ -48,7 +48,7 @@ export default function TaskModal() {
     setForm((prev) => ({ ...prev, [k]: v }))
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
     if (!f.title.trim()) return
     const data = {
@@ -63,8 +63,8 @@ export default function TaskModal() {
         .map((s) => s.trim())
         .filter(Boolean),
     }
-    if (editing) updateTask(editing.id, data)
-    else addTask(data)
+    if (editing) await updateTask(editing.id, data)
+    else await addTask(data)
     closeTaskModal()
   }
 

@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'TaskFlow — Work, beautifully organized',
-  description: 'Shared task management for your team.',
+  title: 'Malcon TMS — Task management for your team',
+  description: 'Malcon TMS — shared task management for your team.',
 }
 
 export const viewport = {

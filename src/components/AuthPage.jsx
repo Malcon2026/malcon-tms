@@ -1,20 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { LogoMark, CheckIcon } from './Icons'
 
 export default function AuthPage() {
-  const { login, register, users } = useApp()
-  const bootstrap = users.length === 0
-  const [mode, setMode] = useState(() => (bootstrap ? 'register' : 'login'))
+  const { login, register, workspaceEmpty } = useApp()
+  const bootstrap = workspaceEmpty
+  const [mode, setMode] = useState('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function submit(e) {
+  useEffect(() => {
+    setMode(bootstrap ? 'register' : 'login')
+  }, [bootstrap])
+
+  async function submit(e) {
     e.preventDefault()
-    const res = mode === 'login' ? login(email, password) : register(name, email, password)
-    if (res.error) setError(res.error)
+    setBusy(true)
+    setError('')
+    const res =
+      mode === 'login' ? await login(email, password) : await register(name, email, password)
+    if (res?.error) setError(res.error)
+    setBusy(false)
   }
 
   return (
@@ -22,7 +31,7 @@ export default function AuthPage() {
       <section className="auth-hero">
         <div className="auth-brand">
           <LogoMark size={28} />
-          <span>TaskFlow</span>
+          <span>Malcon TMS</span>
         </div>
         <h1>
           Work, <span className="gradient-text">beautifully</span>
@@ -31,7 +40,7 @@ export default function AuthPage() {
         </h1>
         <p className="auth-sub">
           A shared workspace where every member is an admin — see all tasks, move work forward
-          together, and only delete what you created.
+          together, and only delete what you created. Data is synced through Supabase.
         </p>
         <ul className="auth-feats">
           <li>
@@ -95,8 +104,8 @@ export default function AuthPage() {
 
           {error && <div className="form-error">{error}</div>}
 
-          <button className="btn-primary btn-block" type="submit">
-            {bootstrap && mode === 'register' ? 'Create workspace' : 'Sign in'}
+          <button className="btn-primary btn-block" type="submit" disabled={busy}>
+            {busy ? 'Please wait…' : bootstrap && mode === 'register' ? 'Create workspace' : 'Sign in'}
           </button>
 
           {bootstrap && (
