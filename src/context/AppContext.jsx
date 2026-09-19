@@ -119,25 +119,18 @@ export function AppProvider({ children }) {
     if (emptyErr) return { error: emptyErr.message }
     if (!empty) return { error: 'Ask a workspace admin to create your account.' }
 
-    const { error } = await supabase.auth.signUp({
-      email: e,
-      password,
-      options: { data: { name: name.trim(), app: 'malcon_tms' } },
+    const { data: boot, error: bootErr } = await supabase.functions.invoke('bootstrap-tms-user', {
+      body: { name: name.trim(), email: e, password },
     })
-    if (error) return { error: error.message }
+    if (bootErr) return { error: bootErr.message }
+    if (boot?.error) return { error: boot.error }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session) {
-      return {
-        error:
-          'Account created. If email confirmation is enabled in Supabase, confirm your email before signing in.',
-      }
-    }
-    setSessionUserId(session.user.id)
+    const signIn = await supabase.auth.signInWithPassword({ email: e, password })
+    if (signIn.error) return { error: signIn.error.message }
+
+    setSessionUserId(signIn.data.session.user.id)
     await loadAll()
-    await log('joined', 'joined the workspace', session.user.id)
+    await log('joined', 'joined the workspace', signIn.data.session.user.id)
     return { ok: true }
   }
 

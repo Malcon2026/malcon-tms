@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "supabase:push": "supabase db push",
-    "supabase:deploy": "supabase functions deploy create-tms-user && supabase functions deploy remove-tms-user"
+    "supabase:deploy": "supabase functions deploy bootstrap-tms-user --no-verify-jwt && supabase functions deploy create-tms-user --no-verify-jwt && supabase functions deploy remove-tms-user --no-verify-jwt"
   },
   "engines": {
     "node": ">=20"

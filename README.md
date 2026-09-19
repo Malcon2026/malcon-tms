@@ -29,8 +29,8 @@ npm run supabase:push
 npm run supabase:deploy
 ```
 
-### Auth setting (important)
-In Supabase Dashboard → **Authentication** → **Providers** → **Email**, turn **off** “Confirm email” so the first workspace signup and admin-created users can sign in immediately.
+### First workspace signup
+Uses the `bootstrap-tms-user` Edge Function (admin API, email pre-confirmed). No manual Auth dashboard changes required for bootstrap or admin-created users.
 
 ### Local environment
 Copy `.env.example` to `.env.local`:
@@ -72,15 +72,8 @@ Requires a **Business** (or Cloud) plan with **Node.js web apps**.
 | Start command | `npm run start -- -p $PORT` |
 | Output directory | `.next` |
 
-### 3. Environment variables (required)
-Add in the Hostinger app **Environment variables** panel:
-
-| Name | Value |
-|------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://urupxpfydfrvjlkpqlvi.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your anon key from Supabase API settings |
-
-Redeploy after saving env vars.
+### 3. Environment variables (optional)
+Production builds embed the public Supabase URL and anon key in `next.config.mjs`, so Hostinger deploy works without extra env vars. Override them in hPanel if you switch Supabase projects.
 
 ### 4. Custom domain
 Attach your domain to the Node.js site in hPanel.
