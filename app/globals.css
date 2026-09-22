@@ -1483,7 +1483,7 @@ select.field {
   text-decoration: underline;
 }
 
-/* ---------- Modal (bottom sheet on mobile) ---------- */
+/* ---------- Case / task modal (full screen) ---------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1496,6 +1496,11 @@ select.field {
   justify-content: center;
   padding: 20px;
   animation: fade 0.2s ease;
+}
+.modal-backdrop--fullscreen {
+  padding: 0;
+  background: #eef1f6;
+  backdrop-filter: none;
 }
 @keyframes fade {
   from {
@@ -1512,22 +1517,109 @@ select.field {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
   animation: rise 0.28s cubic-bezier(0.32, 0.72, 0.36, 1);
 }
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
-  }
+.modal--fullscreen {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  animation: none;
 }
-@media (max-width: 719px) {
-  .modal-backdrop {
-    align-items: flex-end;
-    padding: 0;
-  }
-  .modal {
-    border-radius: 22px 22px 0 0;
-    max-height: 92vh;
-    padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
-  }
+.modal-fullscreen-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.modal-fullscreen-head h2 {
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.modal-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.modal-close-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f2f3f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text);
+  transition: background 0.15s, transform 0.05s;
+}
+.modal-close-btn:hover {
+  background: #e8eaef;
+}
+.modal-close-btn:active {
+  transform: scale(0.96);
+}
+.modal-fullscreen-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 32px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+.modal-fullscreen-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px calc(16px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+.modal-section {
+  background: #fff;
+  border-radius: 20px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+}
+.modal-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: var(--text-2);
+}
+.modal-form-error {
+  margin-bottom: 14px;
+}
+.field-lg {
+  font-size: 17px;
+  padding: 12px 14px;
+}
+.segmented-wrap {
+  flex-wrap: wrap;
+}
+.segmented-wrap button {
+  flex: 1 1 auto;
+  min-width: 72px;
 }
 .modal-head {
   display: flex;

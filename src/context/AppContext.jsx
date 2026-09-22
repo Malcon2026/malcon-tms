@@ -205,10 +205,11 @@ export function AppProvider({ children }) {
       completed_at: data.status === 'done' ? new Date().toISOString() : null,
     }
     const { data: inserted, error } = await supabase.from('malcon_tms_tasks').insert(row).select().single()
-    if (error) return null
+    if (error) return { error: error.message || 'Unable to create task.' }
     const task = mapTask(inserted)
     await log('created', `created "${task.title}"`, null, task.id)
-    return task
+    await loadAll()
+    return { task }
   }
 
   async function updateTask(id, patch) {
