@@ -1610,6 +1610,21 @@ select.field {
 .modal-form-error {
   margin-bottom: 14px;
 }
+.assignee-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.assignee-field {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+}
+.assign-me-btn {
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
 .field-lg {
   font-size: 17px;
   padding: 12px 14px;

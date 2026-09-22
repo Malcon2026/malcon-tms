@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import {
   COLUMNS,
@@ -8,6 +8,7 @@ import {
   dueDayPresetForDate,
   todayStr,
 } from '../lib/store'
+import { PREPARATION_STATUS } from '../lib/workspace'
 import { XIcon, TrashIcon } from './Icons'
 
 export default function TaskModal() {
@@ -66,10 +67,20 @@ export default function TaskModal() {
     }
   }, [modalTask, closeTaskModal])
 
+  const assigneeOptions = useMemo(() => {
+    const list = [...users]
+    if (currentUser && !list.some((u) => u.id === currentUser.id)) {
+      list.unshift(currentUser)
+    }
+    return list
+  }, [users, currentUser])
+
   if (!modalTask || !form) return null
   const f = form
   const creator = editing ? users.find((u) => u.id === editing.createdBy) : null
   const mayDelete = editing && canDeleteTask(editing)
+  const assigneeMissingFromList =
+    f.assigneeId && !assigneeOptions.some((u) => u.id === f.assigneeId)
 
   function set(k, v) {
     setForm((prev) => ({ ...prev, [k]: v }))
@@ -89,6 +100,10 @@ export default function TaskModal() {
     }
     setSaving(true)
     setError('')
+    let assigneeId = f.assigneeId || currentUser?.id || null
+    if (f.status === PREPARATION_STATUS && currentUser) {
+      assigneeId = assigneeId || currentUser.id
+    }
     const data = {
       title: f.title,
       description: f.description,
@@ -96,7 +111,7 @@ export default function TaskModal() {
       priority: f.priority,
       due: f.due || null,
       dueSlot: f.dueSlot || null,
-      assigneeId: f.assigneeId || null,
+      assigneeId,
       tags: f.tags
         .split(',')
         .map((s) => s.trim())
@@ -185,7 +200,17 @@ export default function TaskModal() {
                     type="button"
                     key={c.id}
                     className={f.status === c.id ? 'active' : ''}
-                    onClick={() => set('status', c.id)}
+                    onClick={() => {
+                  setForm((prev) => ({
+                    ...prev,
+                    status: c.id,
+                    assigneeId:
+                      c.id === PREPARATION_STATUS && currentUser
+                        ? prev.assigneeId || currentUser.id
+                        : prev.assigneeId,
+                  }))
+                  setError('')
+                }}
                   >
                     {c.title}
                   </button>
@@ -267,17 +292,35 @@ export default function TaskModal() {
 
           <section className="modal-section">
             <h3 className="modal-section-title">Assignment</h3>
-            <label className="field-label">
-              Assign to
-              <select className="field" value={f.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
-                <option value="">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="assignee-row">
+              <label className="field-label assignee-field">
+                Assign to
+                <select
+                  className="field"
+                  value={assigneeMissingFromList ? '' : f.assigneeId}
+                  onChange={(e) => set('assigneeId', e.target.value)}
+                >
+                  <option value="">Unassigned</option>
+                  {assigneeOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.id === currentUser?.id ? `${u.name} (you)` : u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {currentUser && (
+                <button
+                  type="button"
+                  className="btn-ghost assign-me-btn"
+                  onClick={() => set('assigneeId', currentUser.id)}
+                >
+                  Assign to me
+                </button>
+              )}
+            </div>
+            {assigneeMissingFromList && (
+              <p className="modal-meta">Previous assignee is no longer on the team — pick someone above.</p>
+            )}
             {editing && creator && (
               <p className="modal-meta">
                 Created by <strong>{creator.id === currentUser?.id ? 'you' : creator.name}</strong>

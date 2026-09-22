@@ -38,6 +38,10 @@ Deno.serve(async (req) => {
     const name = (body.name || '').trim()
     const email = (body.email || '').trim().toLowerCase()
     let password = (body.password || '').trim()
+    let role = (body.role || 'store_manager').trim()
+    if (!['admin', 'store_manager', 'case_manager'].includes(role)) {
+      role = 'store_manager'
+    }
 
     if (!name) {
       return new Response(JSON.stringify({ error: 'Please enter a name.' }), {
@@ -73,7 +77,7 @@ Deno.serve(async (req) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { name, created_by_admin: true, app: 'malcon_tms' },
+      user_metadata: { name, created_by_admin: true, app: 'malcon_tms', role },
     })
 
     if (createError) {
@@ -86,6 +90,8 @@ Deno.serve(async (req) => {
         headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
+
+    await admin.from('malcon_tms_profiles').update({ role }).eq('id', created.user!.id)
 
     const { data: profile } = await admin
       .from('malcon_tms_profiles')

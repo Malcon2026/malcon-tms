@@ -1,5 +1,5 @@
 export const COLUMNS = [
-  { id: 'todo', title: 'To Do', dot: '#8e8e93' },
+  { id: 'todo', title: 'Preparation', dot: '#8e8e93' },
   { id: 'inprogress', title: 'In Progress', dot: '#0071e3' },
   { id: 'review', title: 'In Review', dot: '#ff9500' },
   { id: 'done', title: 'Done', dot: '#34c759' },

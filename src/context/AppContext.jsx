@@ -256,7 +256,7 @@ export function AppProvider({ children }) {
     return { ok: true }
   }
 
-  async function addMember(name, email, passwordInput = '') {
+  async function addMember(name, email, passwordInput = '', role = 'store_manager') {
     if (!supabase) return { error: 'Supabase is not configured.' }
     const e = (email || '').trim().toLowerCase()
     if (!isTmsTeamEmail(e)) {
@@ -264,7 +264,7 @@ export function AppProvider({ children }) {
     }
     const pwd = (passwordInput || '').trim()
     const { data, error } = await supabase.functions.invoke('create-tms-user', {
-      body: { name, email, password: pwd || undefined },
+      body: { name, email, password: pwd || undefined, role },
     })
     if (error) return { error: error.message }
     if (data?.error) return { error: data.error }

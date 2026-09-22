@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
+import { TMS_ROLE_LABELS, canManageTeam } from '../lib/workspace'
 import Avatar from './Avatar'
 import { TrashIcon, CopyIcon, PlusIcon } from './Icons'
 
@@ -8,13 +9,14 @@ export default function AdminDashboard() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('store_manager')
   const [error, setError] = useState('')
   const [created, setCreated] = useState(null)
   const [copied, setCopied] = useState(false)
 
   async function submit(e) {
     e.preventDefault()
-    const res = await addMember(name, email, password)
+    const res = await addMember(name, email, password, role)
     if (res.error) {
       setError(res.error)
       setCreated(null)
@@ -61,7 +63,13 @@ export default function AdminDashboard() {
       <div className="team-grid">
         <div className="card">
           <h3 className="card-title">Create user</h3>
-          <form onSubmit={submit}>
+          {!canManageTeam(currentUser) ? (
+            <p className="empty-inline">
+              Only admins can add accounts. Ask an admin to invite you, or use <strong>Assign to me</strong>{' '}
+              when creating a case in Preparation.
+            </p>
+          ) : null}
+          <form onSubmit={submit} style={canManageTeam(currentUser) ? undefined : { display: 'none' }}>
             <label className="field-label">
               Full name
               <input
@@ -80,6 +88,14 @@ export default function AdminDashboard() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@123.com"
               />
+            </label>
+            <label className="field-label">
+              Role
+              <select className="field" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="store_manager">Store manager</option>
+                <option value="case_manager">Case manager</option>
+                <option value="admin">Admin</option>
+              </select>
             </label>
             <label className="field-label">
               Password
@@ -117,8 +133,8 @@ export default function AdminDashboard() {
           )}
 
           <p className="card-foot">
-            New users get admin access and see every task on the board and dashboard. Accounts are
-            stored in Supabase Auth.
+            Store and case managers can assign themselves on cases in Preparation. Accounts are stored in
+            Supabase Auth.
           </p>
         </div>
 
@@ -136,7 +152,7 @@ export default function AdminDashboard() {
                     <span className="member-name">
                       {u.name}
                       {isSelf && <em className="chip chip-you">You</em>}
-                      <em className="chip chip-admin">Admin</em>
+                      <em className="chip chip-admin">{TMS_ROLE_LABELS[u.role] || u.role}</em>
                     </span>
                     <span className="member-email">{u.email}</span>
                   </div>
