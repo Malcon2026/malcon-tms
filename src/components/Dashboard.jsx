@@ -36,8 +36,8 @@ function Ring({ pct }) {
   )
 }
 
-export default function Dashboard() {
-  const { tasks, users, activity, currentUser, openEditTask, setView } = useApp()
+export default function Dashboard({ sidebar = false }) {
+  const { tasks, users, activity, currentUser, openEditTask } = useApp()
 
   const total = tasks.length
   const done = tasks.filter((t) => t.status === 'done').length
@@ -66,22 +66,37 @@ export default function Dashboard() {
   }))
   const maxPriority = Math.max(1, ...priorityCounts.map((p) => p.count))
 
+  const rootClass = sidebar ? 'dashboard-sidebar' : 'page'
+
   return (
-    <div className="page">
-      <div className="page-head">
+    <div className={rootClass}>
+      <div className={sidebar ? 'dash-sidebar-head' : 'page-head'}>
         <div>
-          <h1>
-            {greet}, {currentUser.name.split(' ')[0]}.
+          <h1 className={sidebar ? 'dash-sidebar-title' : undefined}>
+            {sidebar
+              ? `${greet}, ${currentUser.name.split(' ')[0]}`
+              : `${greet}, ${currentUser.name.split(' ')[0]}.`}
           </h1>
-          <p className="page-sub">
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' })}
-            {' · '}You have {myOpen.length} open task{myOpen.length === 1 ? '' : 's'}
-            {open === 0 && ' · nice and quiet out there.'}
+          <p className={sidebar ? 'dash-sidebar-sub' : 'page-sub'}>
+            {new Date().toLocaleDateString('en-IN', {
+              weekday: sidebar ? 'short' : 'long',
+              month: 'short',
+              day: 'numeric',
+            })}
+            {' · '}
+            {myOpen.length} open
+            {!sidebar && (
+              <>
+                {' task'}
+                {myOpen.length === 1 ? '' : 's'}
+                {open === 0 && ' · nice and quiet out there.'}
+              </>
+            )}
           </p>
         </div>
       </div>
 
-      <div className="stats-grid">
+      <div className={'stats-grid' + (sidebar ? ' stats-grid-compact' : '')}>
         <div className="stat-card">
           <span className="stat-label">Total tasks</span>
           <span className="stat-num">{total}</span>
@@ -104,11 +119,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid-2">
+      <div className={sidebar ? 'dash-sidebar-stack' : 'grid-2'}>
         <div className="card">
-          <h3 className="card-title">Progress at a glance</h3>
-          <div className="progress-wrap">
-            <Ring pct={pct} />
+          <h3 className="card-title">Progress</h3>
+          <div className={'progress-wrap' + (sidebar ? ' progress-wrap-compact' : '')}>
+            {!sidebar && <Ring pct={pct} />}
+            {sidebar && (
+              <div className="sidebar-pct">
+                <span className="sidebar-pct-num">{pct}%</span>
+                <span className="sidebar-pct-label">done</span>
+              </div>
+            )}
             <div className="status-bars">
               {statusCounts.map((s) => (
                 <div key={s.id} className="status-row">
@@ -129,33 +150,35 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card">
-          <h3 className="card-title">
-            Priority mix <span className="card-note">open tasks only</span>
-          </h3>
-          <div className="priority-bars">
-            {priorityCounts.map((p) => (
-              <div key={p.id} className="status-row">
-                <span className="status-name">
-                  <i style={{ background: p.color }} />
-                  {p.label}
-                </span>
-                <div className="bar-track">
-                  <div
-                    className="bar-fill"
-                    style={{ width: `${(p.count / maxPriority) * 100}%`, background: p.color }}
-                  />
+        {!sidebar && (
+          <div className="card">
+            <h3 className="card-title">
+              Priority mix <span className="card-note">open tasks only</span>
+            </h3>
+            <div className="priority-bars">
+              {priorityCounts.map((p) => (
+                <div key={p.id} className="status-row">
+                  <span className="status-name">
+                    <i style={{ background: p.color }} />
+                    {p.label}
+                  </span>
+                  <div className="bar-track">
+                    <div
+                      className="bar-fill"
+                      style={{ width: `${(p.count / maxPriority) * 100}%`, background: p.color }}
+                    />
+                  </div>
+                  <span className="status-count">{p.count}</span>
                 </div>
-                <span className="status-count">{p.count}</span>
-              </div>
-            ))}
+              ))}
+            </div>
+            <p className="card-foot">
+              {overdue.length
+                ? `${overdue.length} task${overdue.length === 1 ? '' : 's'} past due — a quick pass over the board will help.`
+                : 'Nothing overdue. Keep it up.'}
+            </p>
           </div>
-          <p className="card-foot">
-            {overdue.length
-              ? `${overdue.length} task${overdue.length === 1 ? '' : 's'} past due — a quick pass over the board will help.`
-              : 'Nothing overdue. Keep it up.'}
-          </p>
-        </div>
+        )}
 
         <div className="card">
           <h3 className="card-title">Needs attention</h3>
@@ -163,7 +186,7 @@ export default function Dashboard() {
             <p className="empty-inline">Nothing due today or overdue. Enjoy the calm.</p>
           ) : (
             <div className="attention-list">
-              {attention.slice(0, 6).map((t) => {
+              {attention.slice(0, sidebar ? 4 : 6).map((t) => {
                 const p = PRIORITIES.find((x) => x.id === t.priority)
                 const a = users.find((u) => u.id === t.assigneeId)
                 return (
@@ -189,7 +212,7 @@ export default function Dashboard() {
             <p className="empty-inline">Activity will show up here as your team works.</p>
           ) : (
             <div className="activity-list">
-              {activity.slice(0, 7).map((a) => {
+              {activity.slice(0, sidebar ? 5 : 7).map((a) => {
                 const u = users.find((x) => x.id === a.userId)
                 return (
                   <div key={a.id} className="activity-row">
@@ -203,9 +226,6 @@ export default function Dashboard() {
               })}
             </div>
           )}
-          <button className="card-link" onClick={() => setView('board')}>
-            Open the board →
-          </button>
         </div>
       </div>
     </div>

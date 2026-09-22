@@ -4,7 +4,7 @@ import { COLUMNS, DUE_DAY_PRESETS, DUE_TIME_SLOTS, taskMatchesDueFilter, taskMat
 import TaskCard from './TaskCard'
 import { SearchIcon, PlusIcon } from './Icons'
 
-export default function Board() {
+export default function Board({ embedded = false }) {
   const { tasks, users, moveTask, openNewTask } = useApp()
   const [query, setQuery] = useState('')
   const [prio, setPrio] = useState('all')
@@ -37,12 +37,17 @@ export default function Board() {
     setDragId(null)
   }
 
+  const rootClass = embedded ? 'board-embedded' : 'page'
+  const titleClass = embedded ? 'board-title-compact' : undefined
+
   return (
-    <div className="page">
-      <div className="page-head board-head">
+    <div className={rootClass}>
+      <div className={'page-head board-head' + (embedded ? ' board-head-embedded' : '')}>
         <div>
-          <h1>Board.</h1>
-          <p className="page-sub">Drag cards between columns — or tap the arrows on mobile.</p>
+          <h1 className={titleClass}>{embedded ? 'Board' : 'Board.'}</h1>
+          {!embedded && (
+            <p className="page-sub">Drag cards between columns — or tap the arrows on mobile.</p>
+          )}
         </div>
         <div className="board-tools">
           <div className="search-box">
@@ -82,7 +87,7 @@ export default function Board() {
         </div>
       </div>
 
-      <div className="board">
+      <div className={'board' + (embedded ? ' board-fill' : '')}>
         {COLUMNS.map((col, ci) => {
           const list = tasks.filter((t) => t.status === col.id && visible(t))
           return (

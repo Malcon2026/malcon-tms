@@ -4,8 +4,7 @@ import Avatar from './Avatar'
 import { LogoMark, PlusIcon, LogoutIcon } from './Icons'
 
 const LINKS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'board', label: 'Board' },
+  { id: 'dashboard', label: 'Workspace' },
   { id: 'admin', label: 'Admin' },
 ]
 
@@ -24,7 +23,16 @@ export default function Navbar() {
           {LINKS.map((l) => (
             <button
               key={l.id}
-              className={'nav-link' + (view === l.id ? ' active' : '')}
+              className={
+                'nav-link' +
+                (l.id === 'dashboard'
+                  ? view === 'dashboard' || view === 'board'
+                    ? ' active'
+                    : ''
+                  : view === l.id
+                    ? ' active'
+                    : '')
+              }
               onClick={() => setView(l.id)}
             >
               {l.label}
