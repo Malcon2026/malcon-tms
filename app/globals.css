@@ -582,6 +582,7 @@ h4 {
   align-items: center;
 }
 .board-tools {
+  flex-wrap: wrap;
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -1098,6 +1099,21 @@ select.field {
   .field-row {
     grid-template-columns: 1fr;
   }
+}
+
+.due-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.due-picker-row {
+  margin: 0;
+}
+.due-calendar {
+  margin: 0;
+}
+.due-slot-segmented button {
+  font-size: 11px;
 }
 
 /* Apple-style segmented control */

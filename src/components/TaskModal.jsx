@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { COLUMNS, PRIORITIES } from '../lib/store'
+import {
+  COLUMNS,
+  DUE_DAY_PRESETS,
+  DUE_TIME_SLOTS,
+  PRIORITIES,
+  dueDayPresetForDate,
+  todayStr,
+} from '../lib/store'
 import { XIcon, TrashIcon } from './Icons'
 
 export default function TaskModal() {
@@ -22,6 +29,7 @@ export default function TaskModal() {
         status: editing.status,
         priority: editing.priority,
         due: editing.due || '',
+        dueSlot: editing.dueSlot || '',
         assigneeId: editing.assigneeId || '',
         tags: (editing.tags || []).join(', '),
       })
@@ -32,6 +40,7 @@ export default function TaskModal() {
         status: modalTask.status || 'todo',
         priority: 'medium',
         due: '',
+        dueSlot: '',
         assigneeId: '',
         tags: '',
       })
@@ -57,6 +66,7 @@ export default function TaskModal() {
       status: f.status,
       priority: f.priority,
       due: f.due || null,
+      dueSlot: f.dueSlot || null,
       assigneeId: f.assigneeId || null,
       tags: f.tags
         .split(',')
@@ -138,23 +148,65 @@ export default function TaskModal() {
           </div>
         </div>
 
-        <div className="field-row">
-          <label className="field-label">
-            Due date
-            <input className="field" type="date" value={f.due} onChange={(e) => set('due', e.target.value)} />
-          </label>
-          <label className="field-label">
-            Assignee
-            <select className="field" value={f.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
-              <option value="">Unassigned</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
+        <div className="field-label">
+          Due date
+          <div className="due-picker">
+            <div className="segmented due-day-segmented">
+              {DUE_DAY_PRESETS.map((preset) => (
+                <button
+                  type="button"
+                  key={preset.id}
+                  className={dueDayPresetForDate(f.due) === preset.id ? 'active' : ''}
+                  onClick={() => set('due', todayStr(preset.offset))}
+                >
+                  {preset.label}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+            <div className="field-row due-picker-row">
+              <label className="field-label due-calendar">
+                Calendar
+                <input className="field" type="date" value={f.due} onChange={(e) => set('due', e.target.value)} />
+              </label>
+              <label className="field-label">
+                Time of day
+                <select className="field" value={f.dueSlot} onChange={(e) => set('dueSlot', e.target.value)}>
+                  <option value="">Any time</option>
+                  {DUE_TIME_SLOTS.map((slot) => (
+                    <option key={slot.id} value={slot.id}>
+                      {slot.label} ({slot.short})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="segmented due-slot-segmented">
+              {DUE_TIME_SLOTS.map((slot) => (
+                <button
+                  type="button"
+                  key={slot.id}
+                  className={f.dueSlot === slot.id ? 'active' : ''}
+                  onClick={() => set('dueSlot', f.dueSlot === slot.id ? '' : slot.id)}
+                  title={slot.short}
+                >
+                  {slot.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
+        <label className="field-label">
+          Assignee
+          <select className="field" value={f.assigneeId} onChange={(e) => set('assigneeId', e.target.value)}>
+            <option value="">Unassigned</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="field-label">
           Tags

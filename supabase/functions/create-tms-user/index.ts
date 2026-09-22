@@ -51,6 +51,12 @@ Deno.serve(async (req) => {
         headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
+    if (!email.endsWith('@123.com')) {
+      return new Response(JSON.stringify({ error: 'TMS users must use an @123.com email.' }), {
+        status: 400,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
 
     const generated = !password
     if (generated) {

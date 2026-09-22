@@ -78,7 +78,7 @@ export default function AdminDashboard() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="sofia@company.com"
+                placeholder="name@123.com"
               />
             </label>
             <label className="field-label">

@@ -6,8 +6,10 @@ import {
   mapTask,
   supabase,
   supabaseConfigured,
+  tagsWithDueSlot,
   taskToRow,
 } from '../lib/supabase'
+import { isTmsTeamEmail, isTmsTeamProfile } from '../lib/workspace'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -37,7 +39,9 @@ export function AppProvider({ children }) {
       supabase.from('malcon_tms_tasks').select('*').order('created_at', { ascending: false }),
       supabase.from('malcon_tms_activity').select('*').order('at', { ascending: false }).limit(80),
     ])
-    if (profilesRes.data) setUsers(profilesRes.data.map(mapProfile))
+    if (profilesRes.data) {
+      setUsers(profilesRes.data.map(mapProfile).filter(isTmsTeamProfile))
+    }
     if (tasksRes.data) setTasks(tasksRes.data.map(mapTask))
     if (activityRes.data) setActivity(activityRes.data.map(mapActivity))
     await refreshWorkspaceEmpty()
@@ -97,6 +101,14 @@ export function AppProvider({ children }) {
     }
   }, [loadAll, refreshWorkspaceEmpty])
 
+  useEffect(() => {
+    if (!ready || !sessionUserId || !supabase) return
+    if (!users.some((u) => u.id === sessionUserId)) {
+      supabase.auth.signOut()
+      setSessionUserId(null)
+    }
+  }, [ready, sessionUserId, users])
+
   async function log(action, detail, userId = null, taskId = null) {
     const who = userId || sessionUserId
     if (!who || !supabase) return
@@ -114,6 +126,9 @@ export function AppProvider({ children }) {
     if (!name.trim()) return { error: 'Please enter your full name.' }
     if (!/^\S+@\S+\.\S+$/.test(e)) return { error: 'Please enter a valid email address.' }
     if ((password || '').length < 6) return { error: 'Password must be at least 6 characters.' }
+    if (!isTmsTeamEmail(e)) {
+      return { error: 'Use your Malcon TMS email (ending in @123.com).' }
+    }
 
     const { data: empty, error: emptyErr } = await supabase.rpc('malcon_tms_workspace_empty')
     if (emptyErr) return { error: emptyErr.message }
@@ -137,8 +152,23 @@ export function AppProvider({ children }) {
   async function login(email, password) {
     if (!supabase) return { error: 'Supabase is not configured.' }
     const e = (email || '').trim().toLowerCase()
+    if (!isTmsTeamEmail(e)) {
+      return { error: 'Use your Malcon TMS email (ending in @123.com).' }
+    }
     const { error } = await supabase.auth.signInWithPassword({ email: e, password })
     if (error) return { error: 'Incorrect email or password.' }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('malcon_tms_profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (!isTmsTeamProfile(mapProfile(profile))) {
+      await supabase.auth.signOut()
+      return { error: 'This account is not in the Malcon TMS team list.' }
+    }
     await loadAll()
     return { ok: true }
   }
@@ -166,7 +196,7 @@ export function AppProvider({ children }) {
       description: (data.description || '').trim(),
       status: data.status || 'todo',
       priority: data.priority || 'medium',
-      tags: data.tags || [],
+      tags: tagsWithDueSlot(data.tags || [], data.dueSlot || null),
       due: data.due || null,
       assignee_id: data.assigneeId || null,
       created_by: currentUser.id,
@@ -184,7 +214,7 @@ export function AppProvider({ children }) {
     const prev = tasks.find((t) => t.id === id)
     if (!prev) return
 
-    const row = taskToRow(patch)
+    const row = taskToRow(patch, prev)
     if (patch.status === 'done' && prev.status !== 'done') row.completed_at = new Date().toISOString()
     if (patch.status && patch.status !== 'done') row.completed_at = null
 
@@ -225,6 +255,10 @@ export function AppProvider({ children }) {
 
   async function addMember(name, email, passwordInput = '') {
     if (!supabase) return { error: 'Supabase is not configured.' }
+    const e = (email || '').trim().toLowerCase()
+    if (!isTmsTeamEmail(e)) {
+      return { error: 'TMS users must use an @123.com email.' }
+    }
     const pwd = (passwordInput || '').trim()
     const { data, error } = await supabase.functions.invoke('create-tms-user', {
       body: { name, email, password: pwd || undefined },

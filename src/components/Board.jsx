@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { COLUMNS } from '../lib/store'
+import { COLUMNS, DUE_DAY_PRESETS, DUE_TIME_SLOTS, taskMatchesDueFilter, taskMatchesDueSlotFilter } from '../lib/store'
 import TaskCard from './TaskCard'
 import { SearchIcon, PlusIcon } from './Icons'
 
@@ -8,6 +8,8 @@ export default function Board() {
   const { tasks, users, moveTask, openNewTask } = useApp()
   const [query, setQuery] = useState('')
   const [prio, setPrio] = useState('all')
+  const [dueFilter, setDueFilter] = useState('all')
+  const [dueSlotFilter, setDueSlotFilter] = useState('all')
   const [dragOver, setDragOver] = useState(null)
   const [dragId, setDragId] = useState(null)
 
@@ -15,6 +17,8 @@ export default function Board() {
 
   function visible(t) {
     if (prio !== 'all' && t.priority !== prio) return false
+    if (!taskMatchesDueFilter(t, dueFilter)) return false
+    if (!taskMatchesDueSlotFilter(t, dueSlotFilter)) return false
     if (!q) return true
     const a = users.find((u) => u.id === t.assigneeId)
     return (
@@ -55,6 +59,25 @@ export default function Board() {
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
+          </select>
+          <select className="filter-select" value={dueFilter} onChange={(e) => setDueFilter(e.target.value)}>
+            <option value="all">All dates</option>
+            {DUE_DAY_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+            <option value="overdue">Overdue</option>
+            <option value="none">No due date</option>
+          </select>
+          <select className="filter-select" value={dueSlotFilter} onChange={(e) => setDueSlotFilter(e.target.value)}>
+            <option value="all">All times</option>
+            <option value="any">Has time of day</option>
+            {DUE_TIME_SLOTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>

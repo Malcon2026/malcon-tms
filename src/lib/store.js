@@ -54,12 +54,35 @@ export function save(key, value) {
   }
 }
 
+export const DUE_DAY_PRESETS = [
+  { id: 'yesterday', label: 'Yesterday', offset: -1 },
+  { id: 'today', label: 'Today', offset: 0 },
+  { id: 'tomorrow', label: 'Tomorrow', offset: 1 },
+]
+
+export const DUE_TIME_SLOTS = [
+  { id: 'start_of_day', label: 'Start of day', short: '9:00 AM' },
+  { id: 'morning', label: 'Morning', short: '10:30 AM' },
+  { id: 'afternoon', label: 'Afternoon', short: '2:00 PM' },
+  { id: 'end_of_day', label: 'End of day', short: '6:00 PM' },
+]
+
+export const DUE_TIME_SLOT_MAP = Object.fromEntries(DUE_TIME_SLOTS.map((s) => [s.id, s]))
+
 export function todayStr(offsetDays = 0) {
   const d = new Date()
   d.setDate(d.getDate() + offsetDays)
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
+}
+
+export function dueDayPresetForDate(dateStr) {
+  if (!dateStr) return null
+  for (const preset of DUE_DAY_PRESETS) {
+    if (dateStr === todayStr(preset.offset)) return preset.id
+  }
+  return null
 }
 
 export function fmtDate(dateStr) {
@@ -72,15 +95,42 @@ export function isOverdue(task) {
   return !!(task.due && task.status !== 'done' && task.due < todayStr())
 }
 
+export function dueSlotLabel(slotId) {
+  if (!slotId) return ''
+  const slot = DUE_TIME_SLOT_MAP[slotId]
+  return slot ? slot.label : ''
+}
+
 export function dueLabel(task) {
   if (!task.due) return ''
-  if (task.status === 'done') return fmtDate(task.due)
+  const slot = dueSlotLabel(task.dueSlot)
+  const slotPart = slot ? ` · ${slot}` : ''
+  if (task.status === 'done') return fmtDate(task.due) + slotPart
   if (task.due < todayStr()) {
     const days = Math.round((new Date(todayStr()) - new Date(task.due)) / 86400000)
-    return days === 1 ? '1 day overdue' : `${days} days overdue`
+    const base = days === 1 ? '1 day overdue' : `${days} days overdue`
+    return base + slotPart
   }
-  if (task.due === todayStr()) return 'Due today'
-  return 'Due ' + fmtDate(task.due)
+  if (task.due === todayStr()) return 'Due today' + slotPart
+  const preset = DUE_DAY_PRESETS.find((p) => task.due === todayStr(p.offset))
+  if (preset) return `Due ${preset.label.toLowerCase()}${slotPart}`
+  return 'Due ' + fmtDate(task.due) + slotPart
+}
+
+export function taskMatchesDueFilter(task, dueFilter) {
+  if (!dueFilter || dueFilter === 'all') return true
+  if (!task.due) return dueFilter === 'none'
+  if (dueFilter === 'none') return false
+  if (dueFilter === 'overdue') return task.due < todayStr() && task.status !== 'done'
+  const preset = DUE_DAY_PRESETS.find((p) => p.id === dueFilter)
+  if (preset) return task.due === todayStr(preset.offset)
+  return true
+}
+
+export function taskMatchesDueSlotFilter(task, slotFilter) {
+  if (!slotFilter || slotFilter === 'all') return true
+  if (slotFilter === 'any') return !!task.dueSlot
+  return task.dueSlot === slotFilter
 }
 
 export function timeAgo(ts) {
