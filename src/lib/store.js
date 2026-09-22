@@ -133,6 +133,41 @@ export function taskMatchesDueSlotFilter(task, slotFilter) {
   return task.dueSlot === slotFilter
 }
 
+export const TASK_CARD_TINTS = ['#fff3e6', '#e9f2ff', '#fceef5', '#e9faf0', '#f3eeff']
+
+export function taskMatchesSearch(task, users, query) {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return true
+  const assignee = users.find((u) => u.id === task.assigneeId)
+  return (
+    task.title.toLowerCase().includes(q) ||
+    (task.description || '').toLowerCase().includes(q) ||
+    (task.tags || []).some((tag) => tag.toLowerCase().includes(q)) ||
+    (assignee && assignee.name.toLowerCase().includes(q))
+  )
+}
+
+export function taskInTimeRange(task, range) {
+  if (!range || range === 'all') return true
+  const ref = task.due || null
+  if (!ref) return range === 'all'
+  const today = todayStr()
+  if (range === 'today') return ref === today
+  if (range === 'tomorrow') return ref === todayStr(1)
+  if (range === 'week') {
+    const end = todayStr(6)
+    return ref >= today && ref <= end
+  }
+  if (range === 'month') {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const taskD = new Date(ref + 'T00:00:00')
+    return taskD.getFullYear() === y && taskD.getMonth() === m
+  }
+  return true
+}
+
 export function timeAgo(ts) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000))
   if (s < 60) return 'just now'

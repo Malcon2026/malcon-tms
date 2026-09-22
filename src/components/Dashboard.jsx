@@ -1,231 +1,317 @@
+import { useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import Avatar from './Avatar'
-import { COLUMNS, PRIORITIES, dueLabel, isOverdue, timeAgo, todayStr } from '../lib/store'
+import {
+  COLUMNS,
+  COLUMN_MAP,
+  PRIORITIES,
+  PRIORITY_MAP,
+  TASK_CARD_TINTS,
+  dueLabel,
+  isOverdue,
+  taskInTimeRange,
+  taskMatchesSearch,
+  timeAgo,
+  todayStr,
+} from '../lib/store'
+import { CheckIcon, PlusIcon } from './Icons'
 
-function Ring({ pct }) {
-  const r = 52
+function StatusDonut({ segments }) {
+  const total = segments.reduce((n, s) => n + s.count, 0) || 1
+  let offset = 0
+  const r = 54
   const c = 2 * Math.PI * r
   return (
-    <svg className="ring" viewBox="0 0 120 120">
-      <defs>
-        <linearGradient id="ringg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#2997ff" />
-          <stop offset="1" stopColor="#bf5af2" />
-        </linearGradient>
-      </defs>
-      <circle cx="60" cy="60" r={r} stroke="#e8e8ed" strokeWidth="11" fill="none" />
-      <circle
-        cx="60"
-        cy="60"
-        r={r}
-        stroke="url(#ringg)"
-        strokeWidth="11"
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={`${(c * pct) / 100} ${c}`}
-        transform="rotate(-90 60 60)"
-        className="ring-progress"
-      />
-      <text x="60" y="57" textAnchor="middle" className="ring-num">
-        {pct}%
-      </text>
-      <text x="60" y="74" textAnchor="middle" className="ring-cap">
-        complete
-      </text>
-    </svg>
+    <div className="donut-wrap">
+      <svg viewBox="0 0 140 140" className="donut-chart">
+        <circle cx="70" cy="70" r={r} fill="none" stroke="#eef0f4" strokeWidth="16" />
+        {segments.map((s) => {
+          const len = (s.count / total) * c
+          const el = (
+            <circle
+              key={s.id}
+              cx="70"
+              cy="70"
+              r={r}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="16"
+              strokeDasharray={`${len} ${c - len}`}
+              strokeDashoffset={-offset}
+              transform="rotate(-90 70 70)"
+              strokeLinecap="butt"
+            />
+          )
+          offset += len
+          return el
+        })}
+        <text x="70" y="66" textAnchor="middle" className="donut-center-num">
+          {total}
+        </text>
+        <text x="70" y="82" textAnchor="middle" className="donut-center-cap">
+          tasks
+        </text>
+      </svg>
+      <ul className="donut-legend">
+        {segments.map((s) => (
+          <li key={s.id}>
+            <i style={{ background: s.color }} />
+            <span>{s.label}</span>
+            <em>{s.count}</em>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
-export default function Dashboard({ sidebar = false }) {
-  const { tasks, users, activity, currentUser, openEditTask } = useApp()
+export default function Dashboard() {
+  const {
+    tasks,
+    users,
+    activity,
+    currentUser,
+    searchQuery,
+    timeRange,
+    openEditTask,
+    openNewTask,
+    updateTask,
+    setView,
+  } = useApp()
+  const [myFilter, setMyFilter] = useState('ongoing')
 
-  const total = tasks.length
-  const done = tasks.filter((t) => t.status === 'done').length
-  const open = total - done
-  const inProgress = tasks.filter((t) => t.status === 'inprogress').length
-  const overdue = tasks.filter(isOverdue)
-  const pct = total ? Math.round((done / total) * 100) : 0
-  const myOpen = tasks.filter((t) => t.assigneeId === currentUser.id && t.status !== 'done')
+  const scoped = useMemo(
+    () => tasks.filter((t) => taskInTimeRange(t, timeRange) && taskMatchesSearch(t, users, searchQuery)),
+    [tasks, timeRange, searchQuery, users]
+  )
 
-  const h = new Date().getHours()
-  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  const myTasks = useMemo(() => {
+    let list = scoped.filter(
+      (t) => t.assigneeId === currentUser.id || (!t.assigneeId && t.createdBy === currentUser.id)
+    )
+    if (myFilter === 'today') list = list.filter((t) => t.due === todayStr())
+    else if (myFilter === 'tomorrow') list = list.filter((t) => t.due === todayStr(1))
+    else list = list.filter((t) => t.status !== 'done')
+    return list.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+  }, [scoped, currentUser.id, myFilter])
 
-  const attention = tasks
-    .filter((t) => t.status !== 'done' && t.due && t.due <= todayStr())
-    .sort((a, b) => a.due.localeCompare(b.due))
+  const statusSegments = [
+    {
+      id: 'open',
+      label: 'Not started',
+      color: '#9aa3b2',
+      count: scoped.filter((t) => t.status === 'todo').length,
+    },
+    {
+      id: 'active',
+      label: 'In progress',
+      color: '#ff9500',
+      count: scoped.filter((t) => t.status === 'inprogress' || t.status === 'review').length,
+    },
+    {
+      id: 'done',
+      label: 'Completed',
+      color: '#0071e3',
+      count: scoped.filter((t) => t.status === 'done').length,
+    },
+  ]
 
-  const statusCounts = COLUMNS.map((c) => ({
-    ...c,
-    count: tasks.filter((t) => t.status === c.id).length,
-  }))
-  const maxStatus = Math.max(1, ...statusCounts.map((s) => s.count))
-
-  const priorityCounts = PRIORITIES.map((p) => ({
+  const priorityRows = PRIORITIES.map((p) => ({
     ...p,
-    count: tasks.filter((t) => t.priority === p.id && t.status !== 'done').length,
+    count: scoped.filter((t) => t.priority === p.id && t.status !== 'done').length,
   }))
-  const maxPriority = Math.max(1, ...priorityCounts.map((p) => p.count))
+  const maxPri = Math.max(1, ...priorityRows.map((p) => p.count))
 
-  const rootClass = sidebar ? 'dashboard-sidebar' : 'page'
+  const upcoming = scoped
+    .filter((t) => t.status !== 'done' && t.due && t.due >= todayStr())
+    .sort((a, b) => a.due.localeCompare(b.due))
+    .slice(0, 5)
+
+  const overdue = scoped.filter(isOverdue)
+  const ongoingCount = scoped.filter(
+    (t) =>
+      (t.assigneeId === currentUser.id || (!t.assigneeId && t.createdBy === currentUser.id)) &&
+      t.status !== 'done'
+  ).length
 
   return (
-    <div className={rootClass}>
-      <div className={sidebar ? 'dash-sidebar-head' : 'page-head'}>
-        <div>
-          <h1 className={sidebar ? 'dash-sidebar-title' : undefined}>
-            {sidebar
-              ? `${greet}, ${currentUser.name.split(' ')[0]}`
-              : `${greet}, ${currentUser.name.split(' ')[0]}.`}
-          </h1>
-          <p className={sidebar ? 'dash-sidebar-sub' : 'page-sub'}>
-            {new Date().toLocaleDateString('en-IN', {
-              weekday: sidebar ? 'short' : 'long',
-              month: 'short',
-              day: 'numeric',
-            })}
-            {' · '}
-            {myOpen.length} open
-            {!sidebar && (
-              <>
-                {' task'}
-                {myOpen.length === 1 ? '' : 's'}
-                {open === 0 && ' · nice and quiet out there.'}
-              </>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div className={'stats-grid' + (sidebar ? ' stats-grid-compact' : '')}>
-        <div className="stat-card">
-          <span className="stat-label">Total tasks</span>
-          <span className="stat-num">{total}</span>
-          <span className="stat-sub">{open} still open</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">In progress</span>
-          <span className="stat-num">{inProgress}</span>
-          <span className="stat-sub">moving right now</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Completed</span>
-          <span className="stat-num">{done}</span>
-          <span className="stat-sub">{pct}% of everything</span>
-        </div>
-        <div className={'stat-card' + (overdue.length ? ' alert' : '')}>
-          <span className="stat-label">Overdue</span>
-          <span className="stat-num">{overdue.length}</span>
-          <span className="stat-sub">{overdue.length ? 'needs your attention' : 'all clear'}</span>
-        </div>
-      </div>
-
-      <div className={sidebar ? 'dash-sidebar-stack' : 'grid-2'}>
-        <div className="card">
-          <h3 className="card-title">Progress</h3>
-          <div className={'progress-wrap' + (sidebar ? ' progress-wrap-compact' : '')}>
-            {!sidebar && <Ring pct={pct} />}
-            {sidebar && (
-              <div className="sidebar-pct">
-                <span className="sidebar-pct-num">{pct}%</span>
-                <span className="sidebar-pct-label">done</span>
-              </div>
-            )}
-            <div className="status-bars">
-              {statusCounts.map((s) => (
-                <div key={s.id} className="status-row">
-                  <span className="status-name">
-                    <i style={{ background: s.dot }} />
-                    {s.title}
-                  </span>
-                  <div className="bar-track">
-                    <div
-                      className="bar-fill"
-                      style={{ width: `${(s.count / maxStatus) * 100}%`, background: s.dot }}
-                    />
-                  </div>
-                  <span className="status-count">{s.count}</span>
-                </div>
-              ))}
-            </div>
+    <div className="studio-dashboard">
+      <div className="studio-grid">
+        <section className="studio-panel studio-my-tasks">
+          <header className="studio-panel-head">
+            <h2>My Tasks</h2>
+            <button type="button" className="studio-icon-btn" onClick={() => openNewTask()} aria-label="Add task">
+              <PlusIcon size={18} />
+            </button>
+          </header>
+          <div className="studio-task-tabs">
+            <button
+              type="button"
+              className={myFilter === 'today' ? 'active' : ''}
+              onClick={() => setMyFilter('today')}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className={myFilter === 'tomorrow' ? 'active' : ''}
+              onClick={() => setMyFilter('tomorrow')}
+            >
+              Tomorrow
+            </button>
+            <button
+              type="button"
+              className={myFilter === 'ongoing' ? 'active' : ''}
+              onClick={() => setMyFilter('ongoing')}
+            >
+              {ongoingCount} ongoing
+            </button>
           </div>
-        </div>
+          <div className="studio-task-list">
+            {myTasks.length === 0 ? (
+              <p className="empty-inline">No tasks in this view. Create one or check the board.</p>
+            ) : (
+              myTasks.map((t, i) => {
+                const pri = PRIORITY_MAP[t.priority]
+                return (
+                  <article
+                    key={t.id}
+                    className="studio-task-card"
+                    style={{ background: TASK_CARD_TINTS[i % TASK_CARD_TINTS.length] }}
+                  >
+                    <div className="studio-task-card-top">
+                      <span className="studio-task-col">{COLUMN_MAP[t.status]?.title}</span>
+                      <button
+                        type="button"
+                        className={'studio-check' + (t.status === 'done' ? ' done' : '')}
+                        onClick={() =>
+                          updateTask(t.id, { status: t.status === 'done' ? 'todo' : 'done' })
+                        }
+                        aria-label={t.status === 'done' ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        <CheckIcon size={14} />
+                      </button>
+                    </div>
+                    <button type="button" className="studio-task-body" onClick={() => openEditTask(t)}>
+                      <h3>{t.title}</h3>
+                      {t.description && <p>{t.description}</p>}
+                      <div className="studio-task-meta">
+                        <span className="pill mini" style={{ color: pri.color, background: pri.bg }}>
+                          {pri.label}
+                        </span>
+                        {t.due && (
+                          <span className={'studio-due' + (isOverdue(t) ? ' overdue' : '')}>
+                            {dueLabel(t)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </article>
+                )
+              })
+            )}
+          </div>
+        </section>
 
-        {!sidebar && (
-          <div className="card">
-            <h3 className="card-title">
-              Priority mix <span className="card-note">open tasks only</span>
-            </h3>
-            <div className="priority-bars">
-              {priorityCounts.map((p) => (
-                <div key={p.id} className="status-row">
-                  <span className="status-name">
+        <div className="studio-center">
+          <section className="studio-panel">
+            <h2 className="studio-panel-title">Tasks overview</h2>
+            <StatusDonut segments={statusSegments} />
+          </section>
+          <section className="studio-panel">
+            <h2 className="studio-panel-title">
+              Priority breakdown <span className="card-note">open tasks</span>
+            </h2>
+            <div className="studio-bars">
+              {priorityRows.map((p) => (
+                <div key={p.id} className="studio-bar-row">
+                  <span className="studio-bar-label">
                     <i style={{ background: p.color }} />
                     {p.label}
                   </span>
                   <div className="bar-track">
                     <div
                       className="bar-fill"
-                      style={{ width: `${(p.count / maxPriority) * 100}%`, background: p.color }}
+                      style={{ width: `${(p.count / maxPri) * 100}%`, background: p.color }}
                     />
                   </div>
                   <span className="status-count">{p.count}</span>
                 </div>
               ))}
             </div>
-            <p className="card-foot">
-              {overdue.length
-                ? `${overdue.length} task${overdue.length === 1 ? '' : 's'} past due — a quick pass over the board will help.`
-                : 'Nothing overdue. Keep it up.'}
-            </p>
-          </div>
-        )}
-
-        <div className="card">
-          <h3 className="card-title">Needs attention</h3>
-          {attention.length === 0 ? (
-            <p className="empty-inline">Nothing due today or overdue. Enjoy the calm.</p>
-          ) : (
-            <div className="attention-list">
-              {attention.slice(0, sidebar ? 4 : 6).map((t) => {
-                const p = PRIORITIES.find((x) => x.id === t.priority)
-                const a = users.find((u) => u.id === t.assigneeId)
+          </section>
+          <section className="studio-panel studio-status-panel">
+            <h2 className="studio-panel-title">Status summary</h2>
+            <div className="studio-bars">
+              {COLUMNS.map((c) => {
+                const count = scoped.filter((t) => t.status === c.id).length
+                const max = Math.max(1, ...COLUMNS.map((col) => scoped.filter((t) => t.status === col.id).length))
                 return (
-                  <button key={t.id} className="attention-row" onClick={() => openEditTask(t)}>
-                    <span className="dot" style={{ background: p.color }} />
-                    <span className="attention-main">
-                      <span className="attention-title">{t.title}</span>
-                      <span className={'attention-due' + (isOverdue(t) ? ' overdue' : '')}>
-                        {dueLabel(t)}
-                      </span>
+                  <div key={c.id} className="studio-bar-row">
+                    <span className="studio-bar-label">
+                      <i style={{ background: c.dot }} />
+                      {c.title}
                     </span>
-                    <Avatar user={a} size={26} />
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <h3 className="card-title">Recent activity</h3>
-          {activity.length === 0 ? (
-            <p className="empty-inline">Activity will show up here as your team works.</p>
-          ) : (
-            <div className="activity-list">
-              {activity.slice(0, sidebar ? 5 : 7).map((a) => {
-                const u = users.find((x) => x.id === a.userId)
-                return (
-                  <div key={a.id} className="activity-row">
-                    <Avatar user={u} size={26} />
-                    <span className="activity-text">
-                      <strong>{u ? u.name.split(' ')[0] : 'Someone'}</strong> {a.detail}
-                    </span>
-                    <span className="activity-time">{timeAgo(a.at)}</span>
+                    <div className="bar-track">
+                      <div
+                        className="bar-fill"
+                        style={{ width: `${(count / max) * 100}%`, background: c.dot }}
+                      />
+                    </div>
+                    <span className="status-count">{count}</span>
                   </div>
                 )
               })}
             </div>
-          )}
+            {overdue.length > 0 && (
+              <p className="card-foot">{overdue.length} overdue — review on the board.</p>
+            )}
+            <button type="button" className="card-link" onClick={() => setView('board')}>
+              Open Kanban board →
+            </button>
+          </section>
+        </div>
+
+        <div className="studio-right">
+          <section className="studio-panel">
+            <h2 className="studio-panel-title">Upcoming due dates</h2>
+            {upcoming.length === 0 ? (
+              <p className="empty-inline">No upcoming deadlines in this period.</p>
+            ) : (
+              <ul className="studio-meetings">
+                {upcoming.map((t) => (
+                  <li key={t.id}>
+                    <button type="button" onClick={() => openEditTask(t)}>
+                      <span className="studio-meet-time">{dueLabel(t)}</span>
+                      <span className="studio-meet-title">{t.title}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="studio-panel">
+            <h2 className="studio-panel-title">Team activity</h2>
+            {activity.length === 0 ? (
+              <p className="empty-inline">Updates from your team will appear here.</p>
+            ) : (
+              <ul className="studio-tickets">
+                {activity.slice(0, 6).map((a) => {
+                  const u = users.find((x) => x.id === a.userId)
+                  return (
+                    <li key={a.id} className="studio-ticket">
+                      <Avatar user={u} size={32} />
+                      <div className="studio-ticket-body">
+                        <strong>{u ? u.name : 'Someone'}</strong>
+                        <p>{a.detail}</p>
+                        <span>{timeAgo(a.at)}</span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
     </div>

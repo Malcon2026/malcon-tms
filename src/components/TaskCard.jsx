@@ -35,9 +35,9 @@ export default function TaskCard({ task, column, onDragStartCard, onDragEndCard 
       <h4 className="card-title">{task.title}</h4>
       {task.description && <p className="card-desc">{task.description}</p>}
 
-      {task.tags && task.tags.length > 0 && (
+      {task.tags && task.tags.filter((tag) => !tag.startsWith('__due:')).length > 0 && (
         <div className="card-tags">
-          {task.tags.map((tag) => (
+          {task.tags.filter((tag) => !tag.startsWith('__due:')).map((tag) => (
             <span key={tag} className="tag">
               {tag}
             </span>

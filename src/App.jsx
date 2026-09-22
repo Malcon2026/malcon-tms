@@ -1,8 +1,10 @@
 import { AppProvider, useApp } from './context/AppContext'
-import Navbar from './components/Navbar'
+import Sidebar from './components/Sidebar'
+import AppHeader from './components/AppHeader'
 import TabBar from './components/TabBar'
 import AuthPage from './components/AuthPage'
-import HomeView from './components/HomeView'
+import Dashboard from './components/Dashboard'
+import Board from './components/Board'
 import AdminDashboard from './components/AdminDashboard'
 import TaskModal from './components/TaskModal'
 
@@ -19,6 +21,21 @@ function ConfigMissing() {
   )
 }
 
+const VIEW_META = {
+  dashboard: {
+    title: 'Project Dashboard',
+    subtitle: 'Manage and track your team tasks.',
+  },
+  board: {
+    title: 'Task Board',
+    subtitle: 'Drag cards between columns — or use arrows on mobile.',
+  },
+  admin: {
+    title: 'Team & settings',
+    subtitle: 'Add colleagues and view workload.',
+  },
+}
+
 function Shell() {
   const { ready, supabaseConfigured, currentUser, view } = useApp()
 
@@ -33,16 +50,22 @@ function Shell() {
   if (!supabaseConfigured) return <ConfigMissing />
   if (!currentUser) return <AuthPage />
 
+  const meta = VIEW_META[view] || VIEW_META.dashboard
+
   return (
-    <>
-      <Navbar />
-      <main className="main">
-        {(view === 'dashboard' || view === 'board') && <HomeView />}
-        {view === 'admin' && <AdminDashboard />}
-      </main>
+    <div className="app-shell">
+      <Sidebar />
+      <div className="app-main">
+        <AppHeader title={meta.title} subtitle={meta.subtitle} />
+        <div className="app-content">
+          {view === 'dashboard' && <Dashboard />}
+          {view === 'board' && <Board />}
+          {view === 'admin' && <AdminDashboard />}
+        </div>
+      </div>
       <TabBar />
       <TaskModal />
-    </>
+    </div>
   )
 }
 

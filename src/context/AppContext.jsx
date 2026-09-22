@@ -22,6 +22,8 @@ export function AppProvider({ children }) {
   const [tasks, setTasks] = useState([])
   const [activity, setActivity] = useState([])
   const [view, setView] = useState('dashboard')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [timeRange, setTimeRange] = useState('month')
   const [modalTask, setModalTask] = useState(null)
 
   const currentUser = users.find((u) => u.id === sessionUserId) || null
@@ -297,6 +299,10 @@ export function AppProvider({ children }) {
     activity,
     view,
     setView,
+    searchQuery,
+    setSearchQuery,
+    timeRange,
+    setTimeRange,
     modalTask,
     openNewTask,
     openEditTask,

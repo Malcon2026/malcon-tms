@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { COLUMNS, DUE_DAY_PRESETS, DUE_TIME_SLOTS, taskMatchesDueFilter, taskMatchesDueSlotFilter } from '../lib/store'
+import {
+  COLUMNS,
+  DUE_DAY_PRESETS,
+  DUE_TIME_SLOTS,
+  taskInTimeRange,
+  taskMatchesDueFilter,
+  taskMatchesDueSlotFilter,
+  taskMatchesSearch,
+} from '../lib/store'
 import TaskCard from './TaskCard'
 import { SearchIcon, PlusIcon } from './Icons'
 
-export default function Board({ embedded = false }) {
-  const { tasks, users, moveTask, openNewTask } = useApp()
+export default function Board() {
+  const { tasks, users, moveTask, openNewTask, searchQuery, timeRange } = useApp()
   const [query, setQuery] = useState('')
   const [prio, setPrio] = useState('all')
   const [dueFilter, setDueFilter] = useState('all')
@@ -16,6 +24,8 @@ export default function Board({ embedded = false }) {
   const q = query.trim().toLowerCase()
 
   function visible(t) {
+    if (!taskInTimeRange(t, timeRange)) return false
+    if (!taskMatchesSearch(t, users, searchQuery)) return false
     if (prio !== 'all' && t.priority !== prio) return false
     if (!taskMatchesDueFilter(t, dueFilter)) return false
     if (!taskMatchesDueSlotFilter(t, dueSlotFilter)) return false
@@ -37,19 +47,9 @@ export default function Board({ embedded = false }) {
     setDragId(null)
   }
 
-  const rootClass = embedded ? 'board-embedded' : 'page'
-  const titleClass = embedded ? 'board-title-compact' : undefined
-
   return (
-    <div className={rootClass}>
-      <div className={'page-head board-head' + (embedded ? ' board-head-embedded' : '')}>
-        <div>
-          <h1 className={titleClass}>{embedded ? 'Board' : 'Board.'}</h1>
-          {!embedded && (
-            <p className="page-sub">Drag cards between columns — or tap the arrows on mobile.</p>
-          )}
-        </div>
-        <div className="board-tools">
+    <div className="page board-page">
+      <div className="board-tools board-tools-standalone">
           <div className="search-box">
             <SearchIcon size={16} />
             <input
@@ -84,10 +84,9 @@ export default function Board({ embedded = false }) {
               </option>
             ))}
           </select>
-        </div>
       </div>
 
-      <div className={'board' + (embedded ? ' board-fill' : '')}>
+      <div className="board">
         {COLUMNS.map((col, ci) => {
           const list = tasks.filter((t) => t.status === col.id && visible(t))
           return (
