@@ -9,7 +9,7 @@ import {
   tagsWithDueSlot,
   taskToRow,
 } from '../lib/supabase'
-import { isTmsTeamEmail, isTmsTeamProfile } from '../lib/workspace'
+import { isTmsTeamEmail, normalizeTmsTeamProfile } from '../lib/workspace'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -25,8 +25,12 @@ export function AppProvider({ children }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [timeRange, setTimeRange] = useState('month')
   const [modalTask, setModalTask] = useState(null)
+  const [sessionProfile, setSessionProfile] = useState(null)
+  const [authResolved, setAuthResolved] = useState(false)
 
-  const currentUser = users.find((u) => u.id === sessionUserId) || null
+  const currentUser =
+    users.find((u) => u.id === sessionUserId) ||
+    (sessionProfile?.id === sessionUserId ? sessionProfile : null)
 
   const refreshWorkspaceEmpty = useCallback(async () => {
     if (!supabase) return
@@ -42,7 +46,12 @@ export function AppProvider({ children }) {
       supabase.from('malcon_tms_activity').select('*').order('at', { ascending: false }).limit(80),
     ])
     if (profilesRes.data) {
-      setUsers(profilesRes.data.map(mapProfile).filter(isTmsTeamProfile))
+      setUsers(
+        profilesRes.data
+          .map(mapProfile)
+          .map(normalizeTmsTeamProfile)
+          .filter(Boolean)
+      )
     }
     if (tasksRes.data) setTasks(tasksRes.data.map(mapTask))
     if (activityRes.data) setActivity(activityRes.data.map(mapActivity))
@@ -104,12 +113,42 @@ export function AppProvider({ children }) {
   }, [loadAll, refreshWorkspaceEmpty])
 
   useEffect(() => {
-    if (!ready || !sessionUserId || !supabase) return
-    if (!users.some((u) => u.id === sessionUserId)) {
-      supabase.auth.signOut()
-      setSessionUserId(null)
+    if (!supabase) {
+      setSessionProfile(null)
+      setAuthResolved(true)
+      return
     }
-  }, [ready, sessionUserId, users])
+    if (!sessionUserId) {
+      setSessionProfile(null)
+      setAuthResolved(true)
+      return
+    }
+
+    let cancelled = false
+    setAuthResolved(false)
+
+    ;(async () => {
+      const { data: row } = await supabase
+        .from('malcon_tms_profiles')
+        .select('*')
+        .eq('id', sessionUserId)
+        .maybeSingle()
+      if (cancelled) return
+      const team = normalizeTmsTeamProfile(mapProfile(row))
+      if (!team) {
+        setSessionProfile(null)
+        await supabase.auth.signOut()
+        if (!cancelled) setSessionUserId(null)
+      } else {
+        setSessionProfile(team)
+      }
+      if (!cancelled) setAuthResolved(true)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionUserId])
 
   async function log(action, detail, userId = null, taskId = null) {
     const who = userId || sessionUserId
@@ -167,10 +206,11 @@ export function AppProvider({ children }) {
       .select('*')
       .eq('id', user.id)
       .maybeSingle()
-    if (!isTmsTeamProfile(mapProfile(profile))) {
+    if (!normalizeTmsTeamProfile(mapProfile(profile))) {
       await supabase.auth.signOut()
       return { error: 'This account is not in the Malcon TMS team list.' }
     }
+    setSessionUserId(user.id)
     await loadAll()
     return { ok: true }
   }
@@ -292,6 +332,7 @@ export function AppProvider({ children }) {
 
   const value = {
     ready,
+    authResolved,
     supabaseConfigured,
     workspaceEmpty,
     users,

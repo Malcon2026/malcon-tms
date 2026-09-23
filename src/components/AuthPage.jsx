@@ -20,10 +20,15 @@ export default function AuthPage() {
     e.preventDefault()
     setBusy(true)
     setError('')
-    const res =
-      mode === 'login' ? await login(email, password) : await register(name, email, password)
-    if (res?.error) setError(res.error)
-    setBusy(false)
+    try {
+      const res =
+        mode === 'login' ? await login(email, password) : await register(name, email, password)
+      if (res?.error) setError(res.error)
+    } catch (err) {
+      setError(err?.message || 'Something went wrong. Try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (

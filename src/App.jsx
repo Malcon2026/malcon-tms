@@ -37,9 +37,9 @@ const VIEW_META = {
 }
 
 function Shell() {
-  const { ready, supabaseConfigured, currentUser, view } = useApp()
+  const { ready, authResolved, supabaseConfigured, currentUser, view } = useApp()
 
-  if (!ready) {
+  if (!ready || !authResolved) {
     return (
       <div className="app-loading">
         <p>Loading Malcon TMS…</p>

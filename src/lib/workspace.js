@@ -13,10 +13,15 @@ export function isTmsTeamEmail(email) {
   return (email || '').toLowerCase().endsWith(TMS_TEAM_EMAIL_SUFFIX)
 }
 
+/** Normalize a mapped profile for TMS team lists (defaults missing role to admin for @123.com). */
+export function normalizeTmsTeamProfile(profile) {
+  if (!profile?.email || !isTmsTeamEmail(profile.email)) return null
+  const role = TMS_ROLES.includes(profile.role) ? profile.role : 'admin'
+  return { ...profile, role }
+}
+
 export function isTmsTeamProfile(profile) {
-  if (!profile) return false
-  if (TMS_ROLES.includes(profile.role)) return isTmsTeamEmail(profile.email)
-  return false
+  return normalizeTmsTeamProfile(profile) != null
 }
 
 export function canManageTeam(profile) {
