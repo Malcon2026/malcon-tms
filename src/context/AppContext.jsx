@@ -65,17 +65,17 @@ export function AppProvider({ children }) {
               .map(normalizeTmsTeamProfile)
               .filter(Boolean)
           )
-        }))
+        }, (err) => console.error("Profiles sync error:", err)))
 
         const tasksQuery = query(collection(db, 'malcon_tms_tasks'), orderBy('created_at', 'desc'))
         unsubs.push(onSnapshot(tasksQuery, (snap) => {
           setTasks(snap.docs.map(mapTask))
-        }))
+        }, (err) => console.error("Tasks sync error:", err)))
 
         const activityQuery = query(collection(db, 'malcon_tms_activity'), orderBy('at', 'desc'), limit(80))
         unsubs.push(onSnapshot(activityQuery, (snap) => {
           setActivity(snap.docs.map(mapActivity))
-        }))
+        }, (err) => console.error("Activity sync error:", err)))
 
       } else {
         setUsers([])
@@ -111,19 +111,25 @@ export function AppProvider({ children }) {
     setAuthResolved(false)
 
     ;(async () => {
-      const docRef = doc(db, 'malcon_tms_profiles', sessionUserId)
-      const snap = await getDoc(docRef)
-      if (cancelled) return
-      
-      const team = snap.exists() ? normalizeTmsTeamProfile(mapProfile(snap)) : null
-      if (!team) {
+      try {
+        const docRef = doc(db, 'malcon_tms_profiles', sessionUserId)
+        const snap = await getDoc(docRef)
+        if (cancelled) return
+        
+        const team = snap.exists() ? normalizeTmsTeamProfile(mapProfile(snap)) : null
+        if (!team) {
+          setSessionProfile(null)
+          await signOut(auth)
+          if (!cancelled) setSessionUserId(null)
+        } else {
+          setSessionProfile(team)
+        }
+      } catch (err) {
+        console.error("Error in auth resolving:", err)
         setSessionProfile(null)
-        await signOut(auth)
-        if (!cancelled) setSessionUserId(null)
-      } else {
-        setSessionProfile(team)
+      } finally {
+        if (!cancelled) setAuthResolved(true)
       }
-      if (!cancelled) setAuthResolved(true)
     })()
 
     return () => {
