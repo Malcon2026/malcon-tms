@@ -12,7 +12,7 @@ import {
   tagsWithDueSlot,
 } from '../lib/firebase'
 import { isTmsTeamEmail, normalizeTmsTeamProfile } from '../lib/workspace'
-import { onAuthStateChange, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from 'firebase/auth'
 import { collection, query, orderBy, limit, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const Ctx = createContext(null)
@@ -38,54 +38,100 @@ export function AppProvider({ children }) {
 
   const refreshWorkspaceEmpty = useCallback(async () => {
     if (!db) return
-    const q = query(collection(db, 'malcon_tms_profiles'), limit(1))
-    const snap = await getDocs(q)
-    setWorkspaceEmpty(snap.empty)
+    try {
+      const q = query(collection(db, 'malcon_tms_profiles'), limit(1))
+      const snap = await getDocs(q)
+      setWorkspaceEmpty(snap.empty)
+    } catch (err) {
+      console.error('refreshWorkspaceEmpty error:', err)
+    }
   }, [])
 
   useEffect(() => {
     if (!firebaseConfigured || !auth || !db) {
       setReady(true)
+      setAuthResolved(true)
       return
     }
 
     let mounted = true
     let unsubs = []
 
+    // Single unified auth listener — no second useEffect to avoid loop
     const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
-      setSessionUserId(user?.uid ?? null)
+      // Tear down any previous Firestore listeners first
+      unsubs.forEach(fn => fn())
+      unsubs = []
+
+      if (!mounted) return
+
       if (user) {
+        // Check Firestore profile before accepting the session
+        let team = null
+        try {
+          const snap = await getDoc(doc(db, 'malcon_tms_profiles', user.uid))
+          if (mounted && snap.exists()) {
+            team = normalizeTmsTeamProfile(mapProfile(snap))
+          }
+        } catch (err) {
+          console.error('Profile fetch error:', err)
+        }
+
+        if (!mounted) return
+
+        if (!team) {
+          // No valid profile found — clear state then sign out
+          // We set mounted-guarded state BEFORE calling signOut so when
+          // onAuthStateChanged fires again (for the null user) we are already
+          // in the "logged out" state and do not loop.
+          setSessionProfile(null)
+          setSessionUserId(null)
+          setReady(true)
+          setAuthResolved(true)
+          auth.signOut().catch(() => {})
+          return
+        }
+
+        // Valid profile — populate state
+        setSessionUserId(user.uid)
+        setSessionProfile(team)
+
         await refreshWorkspaceEmpty()
-        
-        const profilesQuery = query(collection(db, 'malcon_tms_profiles'), orderBy('created_at'))
-        unsubs.push(onSnapshot(profilesQuery, (snap) => {
-          setUsers(
-            snap.docs
-              .map(mapProfile)
-              .map(normalizeTmsTeamProfile)
-              .filter(Boolean)
-          )
-        }, (err) => console.error("Profiles sync error:", err)))
+        if (!mounted) return
 
-        const tasksQuery = query(collection(db, 'malcon_tms_tasks'), orderBy('created_at', 'desc'))
-        unsubs.push(onSnapshot(tasksQuery, (snap) => {
-          setTasks(snap.docs.map(mapTask))
-        }, (err) => console.error("Tasks sync error:", err)))
+        // Subscribe to live Firestore collections
+        unsubs.push(onSnapshot(
+          query(collection(db, 'malcon_tms_profiles'), orderBy('created_at')),
+          (snap) => { if (mounted) setUsers(snap.docs.map(mapProfile).map(normalizeTmsTeamProfile).filter(Boolean)) },
+          (err) => console.error('Profiles sync error:', err)
+        ))
 
-        const activityQuery = query(collection(db, 'malcon_tms_activity'), orderBy('at', 'desc'), limit(80))
-        unsubs.push(onSnapshot(activityQuery, (snap) => {
-          setActivity(snap.docs.map(mapActivity))
-        }, (err) => console.error("Activity sync error:", err)))
+        unsubs.push(onSnapshot(
+          query(collection(db, 'malcon_tms_tasks'), orderBy('created_at', 'desc')),
+          (snap) => { if (mounted) setTasks(snap.docs.map(mapTask)) },
+          (err) => console.error('Tasks sync error:', err)
+        ))
+
+        unsubs.push(onSnapshot(
+          query(collection(db, 'malcon_tms_activity'), orderBy('at', 'desc'), limit(80)),
+          (snap) => { if (mounted) setActivity(snap.docs.map(mapActivity)) },
+          (err) => console.error('Activity sync error:', err)
+        ))
 
       } else {
+        // Signed out — reset all state
+        setSessionUserId(null)
+        setSessionProfile(null)
         setUsers([])
         setTasks([])
         setActivity([])
-        unsubs.forEach(fn => fn())
-        unsubs = []
         await refreshWorkspaceEmpty()
       }
-      setReady(true)
+
+      if (mounted) {
+        setReady(true)
+        setAuthResolved(true)
+      }
     })
 
     return () => {
@@ -94,48 +140,6 @@ export function AppProvider({ children }) {
       unsubs.forEach(fn => fn())
     }
   }, [refreshWorkspaceEmpty])
-
-  useEffect(() => {
-    if (!db) {
-      setSessionProfile(null)
-      setAuthResolved(true)
-      return
-    }
-    if (!sessionUserId) {
-      setSessionProfile(null)
-      setAuthResolved(true)
-      return
-    }
-
-    let cancelled = false
-    setAuthResolved(false)
-
-    ;(async () => {
-      try {
-        const docRef = doc(db, 'malcon_tms_profiles', sessionUserId)
-        const snap = await getDoc(docRef)
-        if (cancelled) return
-        
-        const team = snap.exists() ? normalizeTmsTeamProfile(mapProfile(snap)) : null
-        if (!team) {
-          setSessionProfile(null)
-          await signOut(auth)
-          if (!cancelled) setSessionUserId(null)
-        } else {
-          setSessionProfile(team)
-        }
-      } catch (err) {
-        console.error("Error in auth resolving:", err)
-        setSessionProfile(null)
-      } finally {
-        if (!cancelled) setAuthResolved(true)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [sessionUserId])
 
   async function log(action, detail, userId = null, taskId = null) {
     const who = userId || sessionUserId
@@ -170,17 +174,15 @@ export function AppProvider({ children }) {
       const userCredential = await createUserWithEmailAndPassword(auth, e, password)
       const uid = userCredential.user.uid
 
-      const color = avatar_colors[0]
       await setDoc(doc(db, 'malcon_tms_profiles', uid), {
         id: uid,
         name: name.trim(),
         email: e,
         role: 'admin',
-        color,
+        color: avatar_colors[0],
         created_at: new Date().toISOString()
       })
 
-      setSessionUserId(uid)
       await log('joined', 'joined the workspace', uid)
       return { ok: true }
     } catch (err) {
@@ -204,7 +206,6 @@ export function AppProvider({ children }) {
 
   async function logout() {
     if (auth) await signOut(auth)
-    setSessionUserId(null)
     setView('dashboard')
   }
 
@@ -248,18 +249,14 @@ export function AppProvider({ children }) {
     if (patch.status === 'done' && prev.status !== 'done') row.completed_at = new Date().toISOString()
     if (patch.status && patch.status !== 'done') row.completed_at = null
 
-    const docRef = doc(db, 'malcon_tms_tasks', id)
-    await updateDoc(docRef, row)
-
-    const next = { ...prev, ...patch, updatedAt: Date.now() }
-    if (patch.status === 'done' && prev.status !== 'done') next.completedAt = Date.now()
-    if (patch.status && patch.status !== 'done') next.completedAt = null
+    await updateDoc(doc(db, 'malcon_tms_tasks', id), row)
 
     if (patch.status && patch.status !== prev.status) {
+      const next = { ...prev, ...patch }
       if (patch.status === 'done') await log('completed', `completed "${next.title}"`, null, id)
       else await log('moved', `moved "${next.title}" to ${COLUMN_MAP[patch.status].title}`, null, id)
     } else {
-      await log('updated', `updated "${next.title}"`, null, id)
+      await log('updated', `updated "${prev.title}"`, null, id)
     }
   }
 
@@ -276,7 +273,7 @@ export function AppProvider({ children }) {
       return { error: 'Only the person who created this task can delete it.' }
     }
     if (!db) return { error: 'Firebase is not configured.' }
-    
+
     await deleteDoc(doc(db, 'malcon_tms_tasks', id))
     await log('deleted', `deleted "${prev.title}"`)
     closeTaskModal()
@@ -289,17 +286,17 @@ export function AppProvider({ children }) {
     if (!isTmsTeamEmail(e)) {
       return { error: 'TMS users must use an @123.com email.' }
     }
-    
+
     const pwd = (passwordInput || '').trim() || Math.random().toString(36).slice(-8)
-    
+
     try {
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, e, pwd)
       const uid = userCredential.user.uid
       await signOut(secondaryAuth)
-      
+
       const pCount = users.length
       const color = avatar_colors[(pCount % avatar_colors.length)]
-      
+
       const profile = {
         id: uid,
         name,
@@ -309,7 +306,7 @@ export function AppProvider({ children }) {
         created_at: new Date().toISOString()
       }
       await setDoc(doc(db, 'malcon_tms_profiles', uid), profile)
-      
+
       await log('invited', `created account for ${name}`)
       return {
         ok: true,
@@ -326,9 +323,7 @@ export function AppProvider({ children }) {
     if (!db) return
     const member = users.find((u) => u.id === id)
     if (!member || member.id === currentUser?.id) return
-    
-    // Without admin SDK, we can't easily delete the auth user here.
-    // We will just remove their profile document, which will block their access because of team membership check.
+
     await deleteDoc(doc(db, 'malcon_tms_profiles', id))
     await log('removed', `removed ${member.name} from the team`)
   }
