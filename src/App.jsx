@@ -13,8 +13,7 @@ function ConfigMissing() {
     <div className="app-loading">
       <h1>Malcon TMS</h1>
       <p>
-        Supabase is not configured. Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
-        <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in your environment (see <code>.env.example</code>
+        Firebase is not configured. Set the Firebase keys in your environment (see <code>.env.example</code>
         ).
       </p>
     </div>
@@ -37,7 +36,7 @@ const VIEW_META = {
 }
 
 function Shell() {
-  const { ready, authResolved, supabaseConfigured, currentUser, view } = useApp()
+  const { ready, authResolved, firebaseConfigured, currentUser, view } = useApp()
 
   if (!ready || !authResolved) {
     return (
@@ -47,7 +46,7 @@ function Shell() {
     )
   }
 
-  if (!supabaseConfigured) return <ConfigMissing />
+  if (!firebaseConfigured) return <ConfigMissing />
   if (!currentUser) return <AuthPage />
 
   const meta = VIEW_META[view] || VIEW_META.dashboard

@@ -4,12 +4,16 @@ import {
   mapActivity,
   mapProfile,
   mapTask,
-  supabase,
-  supabaseConfigured,
-  tagsWithDueSlot,
+  firebaseConfigured,
+  auth,
+  db,
+  secondaryAuth,
   taskToRow,
-} from '../lib/supabase'
+  tagsWithDueSlot,
+} from '../lib/firebase'
 import { isTmsTeamEmail, normalizeTmsTeamProfile } from '../lib/workspace'
+import { onAuthStateChange, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { collection, query, orderBy, limit, onSnapshot, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -33,87 +37,66 @@ export function AppProvider({ children }) {
     (sessionProfile?.id === sessionUserId ? sessionProfile : null)
 
   const refreshWorkspaceEmpty = useCallback(async () => {
-    if (!supabase) return
-    const { data, error } = await supabase.rpc('malcon_tms_workspace_empty')
-    if (!error) setWorkspaceEmpty(!!data)
+    if (!db) return
+    const q = query(collection(db, 'malcon_tms_profiles'), limit(1))
+    const snap = await getDocs(q)
+    setWorkspaceEmpty(snap.empty)
   }, [])
 
-  const loadAll = useCallback(async () => {
-    if (!supabase) return
-    const [profilesRes, tasksRes, activityRes] = await Promise.all([
-      supabase.from('malcon_tms_profiles').select('*').order('created_at'),
-      supabase.from('malcon_tms_tasks').select('*').order('created_at', { ascending: false }),
-      supabase.from('malcon_tms_activity').select('*').order('at', { ascending: false }).limit(80),
-    ])
-    if (profilesRes.data) {
-      setUsers(
-        profilesRes.data
-          .map(mapProfile)
-          .map(normalizeTmsTeamProfile)
-          .filter(Boolean)
-      )
-    }
-    if (tasksRes.data) setTasks(tasksRes.data.map(mapTask))
-    if (activityRes.data) setActivity(activityRes.data.map(mapActivity))
-    await refreshWorkspaceEmpty()
-  }, [refreshWorkspaceEmpty])
-
   useEffect(() => {
-    if (!supabaseConfigured || !supabase) {
+    if (!firebaseConfigured || !auth || !db) {
       setReady(true)
       return
     }
 
     let mounted = true
+    let unsubs = []
 
-    async function init() {
-      await refreshWorkspaceEmpty()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!mounted) return
-      setSessionUserId(session?.user?.id ?? null)
-      if (session?.user) await loadAll()
-      setReady(true)
-    }
+    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+      setSessionUserId(user?.uid ?? null)
+      if (user) {
+        await refreshWorkspaceEmpty()
+        
+        const profilesQuery = query(collection(db, 'malcon_tms_profiles'), orderBy('created_at'))
+        unsubs.push(onSnapshot(profilesQuery, (snap) => {
+          setUsers(
+            snap.docs
+              .map(mapProfile)
+              .map(normalizeTmsTeamProfile)
+              .filter(Boolean)
+          )
+        }))
 
-    init()
+        const tasksQuery = query(collection(db, 'malcon_tms_tasks'), orderBy('created_at', 'desc'))
+        unsubs.push(onSnapshot(tasksQuery, (snap) => {
+          setTasks(snap.docs.map(mapTask))
+        }))
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSessionUserId(session?.user?.id ?? null)
-      if (session?.user) await loadAll()
-      else {
+        const activityQuery = query(collection(db, 'malcon_tms_activity'), orderBy('at', 'desc'), limit(80))
+        unsubs.push(onSnapshot(activityQuery, (snap) => {
+          setActivity(snap.docs.map(mapActivity))
+        }))
+
+      } else {
         setUsers([])
         setTasks([])
         setActivity([])
+        unsubs.forEach(fn => fn())
+        unsubs = []
         await refreshWorkspaceEmpty()
       }
+      setReady(true)
     })
-
-    const channel = supabase
-      .channel('malcon-tms')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'malcon_tms_profiles' }, () => {
-        loadAll()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'malcon_tms_tasks' }, () => {
-        loadAll()
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'malcon_tms_activity' }, () => {
-        loadAll()
-      })
-      .subscribe()
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
-      supabase.removeChannel(channel)
+      unsubscribeAuth()
+      unsubs.forEach(fn => fn())
     }
-  }, [loadAll, refreshWorkspaceEmpty])
+  }, [refreshWorkspaceEmpty])
 
   useEffect(() => {
-    if (!supabase) {
+    if (!db) {
       setSessionProfile(null)
       setAuthResolved(true)
       return
@@ -128,16 +111,14 @@ export function AppProvider({ children }) {
     setAuthResolved(false)
 
     ;(async () => {
-      const { data: row } = await supabase
-        .from('malcon_tms_profiles')
-        .select('*')
-        .eq('id', sessionUserId)
-        .maybeSingle()
+      const docRef = doc(db, 'malcon_tms_profiles', sessionUserId)
+      const snap = await getDoc(docRef)
       if (cancelled) return
-      const team = normalizeTmsTeamProfile(mapProfile(row))
+      
+      const team = snap.exists() ? normalizeTmsTeamProfile(mapProfile(snap)) : null
       if (!team) {
         setSessionProfile(null)
-        await supabase.auth.signOut()
+        await signOut(auth)
         if (!cancelled) setSessionUserId(null)
       } else {
         setSessionProfile(team)
@@ -152,17 +133,22 @@ export function AppProvider({ children }) {
 
   async function log(action, detail, userId = null, taskId = null) {
     const who = userId || sessionUserId
-    if (!who || !supabase) return
-    await supabase.from('malcon_tms_activity').insert({
+    if (!who || !db) return
+    await addDoc(collection(db, 'malcon_tms_activity'), {
       user_id: who,
       action,
       detail,
       task_id: taskId || null,
+      at: new Date().toISOString(),
     })
   }
 
+  const avatar_colors = [
+    '#0071e3', '#bf5af2', '#ff375f', '#ff9500', '#34c759', '#5e5ce6', '#00a8c5', '#8e8e93'
+  ]
+
   async function register(name, email, password) {
-    if (!supabase) return { error: 'Supabase is not configured.' }
+    if (!auth || !db) return { error: 'Firebase is not configured.' }
     const e = (email || '').trim().toLowerCase()
     if (!name.trim()) return { error: 'Please enter your full name.' }
     if (!/^\S+@\S+\.\S+$/.test(e)) return { error: 'Please enter a valid email address.' }
@@ -171,52 +157,47 @@ export function AppProvider({ children }) {
       return { error: 'Use your Malcon TMS email (ending in @123.com).' }
     }
 
-    const { data: empty, error: emptyErr } = await supabase.rpc('malcon_tms_workspace_empty')
-    if (emptyErr) return { error: emptyErr.message }
-    if (!empty) return { error: 'Ask a workspace admin to create your account.' }
+    await refreshWorkspaceEmpty()
+    if (!workspaceEmpty) return { error: 'Ask a workspace admin to create your account.' }
 
-    const { data: boot, error: bootErr } = await supabase.functions.invoke('bootstrap-tms-user', {
-      body: { name: name.trim(), email: e, password },
-    })
-    if (bootErr) return { error: bootErr.message }
-    if (boot?.error) return { error: boot.error }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, e, password)
+      const uid = userCredential.user.uid
 
-    const signIn = await supabase.auth.signInWithPassword({ email: e, password })
-    if (signIn.error) return { error: signIn.error.message }
+      const color = avatar_colors[0]
+      await setDoc(doc(db, 'malcon_tms_profiles', uid), {
+        id: uid,
+        name: name.trim(),
+        email: e,
+        role: 'admin',
+        color,
+        created_at: new Date().toISOString()
+      })
 
-    setSessionUserId(signIn.data.session.user.id)
-    await loadAll()
-    await log('joined', 'joined the workspace', signIn.data.session.user.id)
-    return { ok: true }
+      setSessionUserId(uid)
+      await log('joined', 'joined the workspace', uid)
+      return { ok: true }
+    } catch (err) {
+      return { error: err.message }
+    }
   }
 
   async function login(email, password) {
-    if (!supabase) return { error: 'Supabase is not configured.' }
+    if (!auth) return { error: 'Firebase is not configured.' }
     const e = (email || '').trim().toLowerCase()
     if (!isTmsTeamEmail(e)) {
       return { error: 'Use your Malcon TMS email (ending in @123.com).' }
     }
-    const { error } = await supabase.auth.signInWithPassword({ email: e, password })
-    if (error) return { error: 'Incorrect email or password.' }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    const { data: profile } = await supabase
-      .from('malcon_tms_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-    if (!normalizeTmsTeamProfile(mapProfile(profile))) {
-      await supabase.auth.signOut()
-      return { error: 'This account is not in the Malcon TMS team list.' }
+    try {
+      await signInWithEmailAndPassword(auth, e, password)
+      return { ok: true }
+    } catch (err) {
+      return { error: 'Incorrect email or password.' }
     }
-    setSessionUserId(user.id)
-    await loadAll()
-    return { ok: true }
   }
 
   async function logout() {
-    if (supabase) await supabase.auth.signOut()
+    if (auth) await signOut(auth)
     setSessionUserId(null)
     setView('dashboard')
   }
@@ -232,7 +213,7 @@ export function AppProvider({ children }) {
   }
 
   async function addTask(data) {
-    if (!supabase || !currentUser) return null
+    if (!db || !currentUser) return null
     const row = {
       title: data.title.trim(),
       description: (data.description || '').trim(),
@@ -242,18 +223,18 @@ export function AppProvider({ children }) {
       due: data.due || null,
       assignee_id: data.assigneeId || null,
       created_by: currentUser.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       completed_at: data.status === 'done' ? new Date().toISOString() : null,
     }
-    const { data: inserted, error } = await supabase.from('malcon_tms_tasks').insert(row).select().single()
-    if (error) return { error: error.message || 'Unable to create task.' }
-    const task = mapTask(inserted)
+    const docRef = await addDoc(collection(db, 'malcon_tms_tasks'), row)
+    const task = mapTask({ id: docRef.id, ...row })
     await log('created', `created "${task.title}"`, null, task.id)
-    await loadAll()
     return { task }
   }
 
   async function updateTask(id, patch) {
-    if (!supabase) return
+    if (!db) return
     const prev = tasks.find((t) => t.id === id)
     if (!prev) return
 
@@ -261,8 +242,8 @@ export function AppProvider({ children }) {
     if (patch.status === 'done' && prev.status !== 'done') row.completed_at = new Date().toISOString()
     if (patch.status && patch.status !== 'done') row.completed_at = null
 
-    const { error } = await supabase.from('malcon_tms_tasks').update(row).eq('id', id)
-    if (error) return
+    const docRef = doc(db, 'malcon_tms_tasks', id)
+    await updateDoc(docRef, row)
 
     const next = { ...prev, ...patch, updatedAt: Date.now() }
     if (patch.status === 'done' && prev.status !== 'done') next.completedAt = Date.now()
@@ -288,52 +269,68 @@ export function AppProvider({ children }) {
     if (!canDeleteTask(prev, currentUser)) {
       return { error: 'Only the person who created this task can delete it.' }
     }
-    if (!supabase) return { error: 'Supabase is not configured.' }
-    const { error } = await supabase.from('malcon_tms_tasks').delete().eq('id', id)
-    if (error) return { error: error.message }
+    if (!db) return { error: 'Firebase is not configured.' }
+    
+    await deleteDoc(doc(db, 'malcon_tms_tasks', id))
     await log('deleted', `deleted "${prev.title}"`)
     closeTaskModal()
     return { ok: true }
   }
 
   async function addMember(name, email, passwordInput = '', role = 'store_manager') {
-    if (!supabase) return { error: 'Supabase is not configured.' }
+    if (!db || !secondaryAuth) return { error: 'Firebase is not configured.' }
     const e = (email || '').trim().toLowerCase()
     if (!isTmsTeamEmail(e)) {
       return { error: 'TMS users must use an @123.com email.' }
     }
-    const pwd = (passwordInput || '').trim()
-    const { data, error } = await supabase.functions.invoke('create-tms-user', {
-      body: { name, email, password: pwd || undefined, role },
-    })
-    if (error) return { error: error.message }
-    if (data?.error) return { error: data.error }
-    await loadAll()
-    await log('invited', `created account for ${data.user.name}`)
-    return {
-      ok: true,
-      user: mapProfile(data.user),
-      password: data.password,
-      generated: data.generated,
+    
+    const pwd = (passwordInput || '').trim() || Math.random().toString(36).slice(-8)
+    
+    try {
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, e, pwd)
+      const uid = userCredential.user.uid
+      await signOut(secondaryAuth)
+      
+      const pCount = users.length
+      const color = avatar_colors[(pCount % avatar_colors.length)]
+      
+      const profile = {
+        id: uid,
+        name,
+        email: e,
+        role,
+        color,
+        created_at: new Date().toISOString()
+      }
+      await setDoc(doc(db, 'malcon_tms_profiles', uid), profile)
+      
+      await log('invited', `created account for ${name}`)
+      return {
+        ok: true,
+        user: mapProfile(profile),
+        password: pwd,
+        generated: !passwordInput,
+      }
+    } catch (err) {
+      return { error: err.message }
     }
   }
 
   async function removeMember(id) {
-    if (!supabase) return
+    if (!db) return
     const member = users.find((u) => u.id === id)
     if (!member || member.id === currentUser?.id) return
-    const { data, error } = await supabase.functions.invoke('remove-tms-user', {
-      body: { userId: id },
-    })
-    if (error || data?.error) return
+    
+    // Without admin SDK, we can't easily delete the auth user here.
+    // We will just remove their profile document, which will block their access because of team membership check.
+    await deleteDoc(doc(db, 'malcon_tms_profiles', id))
     await log('removed', `removed ${member.name} from the team`)
-    await loadAll()
   }
 
   const value = {
     ready,
     authResolved,
-    supabaseConfigured,
+    firebaseConfigured,
     workspaceEmpty,
     users,
     currentUser,
